@@ -1,5 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { FlowBuilder } from 'voxtelesys-flow'
+import {
+  type FlowWidgetGroup,
+  flowWidgetGroupsFromEnv,
+  mountFlowWidgetLibraryFilter,
+} from '../lib/flowWidgetLibraryFilter'
 
 const CANVAS_MOUNT_ID = 'vox-flow-canvas'
 
@@ -11,22 +17,53 @@ function readConfig() {
   return { apiKey, flowGuid, companyName, companyLogo }
 }
 
-export function FlowCanvas() {
+type FlowCanvasProps = {
+  /** When set (e.g. from routing), overrides `VITE_VOX_FLOW_GUID`. */
+  flowGuid?: string
+  /** Called when the Canvas back control is used. */
+  onBack?: () => void
+  /**
+   * Left sidebar widget groups to keep visible (`voice`, `messaging`, `rcs`, `tools`, `control`).
+   * When omitted, uses `VITE_VOX_FLOW_LIBRARY_GROUPS` if set.
+   */
+  widgetLibraryGroups?: FlowWidgetGroup[] | null
+}
+
+export function FlowCanvas({
+  flowGuid: flowGuidProp,
+  onBack,
+  widgetLibraryGroups,
+}: FlowCanvasProps) {
   const [error, setError] = useState<string | null>(null)
-  const { apiKey, flowGuid, companyName, companyLogo } = readConfig()
+  const { apiKey, flowGuid: flowGuidEnv, companyName, companyLogo } = readConfig()
+  const flowGuid = (flowGuidProp?.trim() || flowGuidEnv).trim()
+  const onBackRef = useRef(onBack)
+
+  useEffect(() => {
+    onBackRef.current = onBack
+  }, [onBack])
 
   useEffect(() => {
     if (!apiKey || !flowGuid) return
 
     let cancelled = false
+    /* Init Canvas when credentials / flow change; clear prior error on retry. */
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset before (re)initializing FlowBuilder
     setError(null)
+
+    const allowedGroups =
+      widgetLibraryGroups && widgetLibraryGroups.length > 0
+        ? widgetLibraryGroups
+        : flowWidgetGroupsFromEnv()
+    const removeWidgetFilter = mountFlowWidgetLibraryFilter(allowedGroups)
 
     void (async () => {
       try {
         await FlowBuilder.init(CANVAS_MOUNT_ID, {
           apiKey,
           flowGuid,
-          onBack: () => window.history.back(),
+          onBack: () =>
+            (onBackRef.current ?? (() => window.history.back()))(),
           ...(companyName ? { companyName } : {}),
           ...(companyLogo ? { companyLogo } : {}),
           styling: {
@@ -44,8 +81,9 @@ export function FlowCanvas() {
 
     return () => {
       cancelled = true
+      removeWidgetFilter()
     }
-  }, [apiKey, flowGuid, companyName, companyLogo])
+  }, [apiKey, flowGuid, companyName, companyLogo, widgetLibraryGroups])
 
   if (!apiKey || !flowGuid) {
     return (
@@ -60,10 +98,12 @@ VITE_VOX_FLOW_GUID=your_flow_guid
 
 # optional
 # VITE_VOX_COMPANY_NAME=Example Co
-# VITE_VOX_COMPANY_LOGO=https://example.com/logo.png`}
+# VITE_VOX_COMPANY_LOGO=https://example.com/logo.png
+# VITE_VOX_FLOW_LIBRARY_GROUPS=voice,control`}
         </pre>
         <p className="flow-canvas__hint">
-          Create keys and flows in the{' '}
+          Open the <Link to="/">flow list</Link> to pick a flow, or set{' '}
+          <code>VITE_VOX_FLOW_GUID</code>. Create keys in the{' '}
           <a
             href="https://portal.voxtelesys.net/"
             target="_blank"

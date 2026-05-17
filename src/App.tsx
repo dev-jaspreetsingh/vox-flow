@@ -1,11 +1,19 @@
-import { FlowCanvas } from './components/FlowCanvas'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { FlowEditorPage } from './components/FlowEditorPage'
+import { FlowListPage } from './components/FlowListPage'
 import './App.css'
 
 function App() {
   return (
-    <div className="app">
-      <FlowCanvas />
-    </div>
+    <BrowserRouter>
+      <div className="app">
+        <Routes>
+          <Route path="/" element={<FlowListPage />} />
+          <Route path="/flow/:flowGuid" element={<FlowEditorPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </div>
+    </BrowserRouter>
   )
 }
 
